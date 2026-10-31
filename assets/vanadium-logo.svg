@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Vanadium">
+  <defs>
+    <g id="bc"><path d="M0 -13 13 -6.5 0 0 -13 -6.5Z" style="fill:var(--t)"/><path d="M-13 -6.5 0 0V15L-13 8.5Z" style="fill:var(--l)"/><path d="M0 0 13 -6.5V8.5L0 15Z" style="fill:var(--r)"/></g>
+  </defs>
+  <g style="--t:#d6c8ff;--l:#8b5cf6;--r:#5b21b6">
+    <use href="#bc" x="22" y="26"/><use href="#bc" x="106" y="26"/>
+    <use href="#bc" x="33" y="47"/><use href="#bc" x="95" y="47"/>
+    <use href="#bc" x="44" y="68"/><use href="#bc" x="84" y="68"/>
+    <use href="#bc" x="54" y="89"/><use href="#bc" x="74" y="89"/>
+  </g>
+  <g style="--t:#b9fff0;--l:#00d4a8;--r:#00806a"><use href="#bc" x="64" y="109"/></g>
+</svg>
