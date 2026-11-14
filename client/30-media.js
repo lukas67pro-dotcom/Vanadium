@@ -18,6 +18,13 @@ html.vn-custom-loading .splash-screen { display: none !important; }
 .playing .vn-eq i, .vn-eq.on i { animation: vn-eq .8s ease-in-out infinite alternate; }
 .vn-eq i:nth-child(2) { animation-delay: -.3s !important; } .vn-eq i:nth-child(3) { animation-delay: -.55s !important; }
 @keyframes vn-eq { to { height: 100%; } }
+.vn-player { position: relative; overflow: hidden; }
+.vn-eq[hidden] { display: none; }
+.vn-mp-art { width: 22px; height: 22px; flex: none; margin-left: 6px; border-radius: 5px; object-fit: cover; background: color-mix(in srgb, var(--color-text-primary) 10%, transparent); }
+.vn-mp-art[hidden] { display: none; }
+.vn-mp-progress { position: absolute; left: 14px; right: 14px; bottom: 2px; height: 2px; border-radius: 2px; pointer-events: none;
+  background: linear-gradient(90deg, var(--vn-a1), var(--vn-a2)) 0 / var(--p, 0%) 100% no-repeat; }
+.vn-mp-progress[hidden] { display: none; }
 `;
 const eqBars = (on) => h('span', { class: `vn-eq${on ? ' on' : ''}`, 'aria-hidden': 'true' }, h('i'), h('i'), h('i'));
 const trackName = (t) => t.name.replace(/\.[a-z0-9]{2,5}$/i, '');
@@ -163,6 +170,7 @@ async function playTrack(i) {
   try {
     music.audio.src = await media.url(list[music.index]);
     music.audio.volume = S['music.volume'] / 100;
+    pauseExternal();
     await music.audio.play();
     music.errors = 0;
   } catch (e) {
@@ -187,7 +195,7 @@ function prevTrack() {
 function togglePlay() {
   if (music.index < 0 || !music.audio.src) return playTrack(S['music.shuffle'] ? Math.floor(Math.random() * S['music.list'].length) : 0);
   music.pausedByGame = false;
-  if (music.audio.paused) music.audio.play().catch((e) => toast(`Playback failed: ${e.message}`, 'error'));
+  if (music.audio.paused) { pauseExternal(); music.audio.play().catch((e) => toast(`Playback failed: ${e.message}`, 'error')); }
   else music.audio.pause();
 }
 music.audio.addEventListener('ended', nextTrack);
@@ -220,6 +228,55 @@ function moveTrack(i, d) {
   notifyMusic();
 }
 
+// ---------- Spotify / Spicetify in the title bar ----------
+// Read through Windows' system media controls by the loader (see vanadiumHost), so no Spotify login is needed.
+// Spicetify is a modded Spotify client, so it shows up the same way. "Any app" also follows browsers and other players.
+const ext = { state: null, art: null, artKey: '', busy: false };
+const extFilter = () => (S['spotify.mode'] === 'any' ? 'any' : 'spotify');
+const extActive = () => S['spotify.mode'] !== 'off' && !!ext.state;
+const extApp = (id = '') => (/spotify/i.test(id) ? 'Spotify' : id.split('!').pop().replace(/\.exe$/i, '') || 'media player');
+// Vanadium's own playlist wins while it plays; otherwise Spotify; otherwise the idle playlist.
+const playerSource = () => (music.audio.paused && extActive() ? 'ext' : 'playlist');
+const extPosition = () => {
+  const st = ext.state;
+  if (!st?.dur) return 0;
+  return Math.min(st.dur, st.playing ? st.pos + (Date.now() - st.at) / 1000 : st.pos) / st.dur;
+};
+
+async function pollExternal() {
+  if (S['spotify.mode'] === 'off') { if (ext.state) { ext.state = null; notifyMusic(); } return; }
+  if (document.hidden || ext.busy || typeof window.vanadiumHost !== 'function') return;
+  ext.busy = true;
+  try {
+    let st = await host('media', { filter: extFilter() });
+    if (st && ext.expect) { // keep a just-clicked play/pause until Windows reports it (or 3 s pass)
+      if (Date.now() < ext.expect.until && st.playing !== ext.expect.playing) st = { ...st, playing: ext.expect.playing };
+      else ext.expect = null;
+    }
+    const key = st ? `${st.title}\u0000${st.artist}` : '';
+    if (key !== ext.artKey) { // new track: fetch its cover once
+      ext.artKey = key;
+      ext.art = null;
+      if (st) host('art', { filter: extFilter() }).then((a) => { if (ext.artKey === key) { ext.art = a; notifyMusic(); } }).catch(() => {});
+    }
+    const changed = JSON.stringify(st) !== JSON.stringify(ext.state);
+    ext.state = st;
+    if (changed) notifyMusic();
+  } catch {} finally { ext.busy = false; }
+}
+async function extCmd(action) {
+  // Spotify reports its new state a second or two later, so flip the button right away; the next poll confirms it.
+  if (ext.state && (action === 'toggle' || action === 'pause')) {
+    const playing = action === 'pause' ? false : !ext.state.playing;
+    ext.expect = { playing, until: Date.now() + 3000 };
+    ext.state = { ...ext.state, playing, pos: ext.state.pos + (ext.state.playing ? (Date.now() - ext.state.at) / 1000 : 0), at: Date.now() };
+    notifyMusic();
+  }
+  try { await host('mcmd', { action, filter: extFilter() }); } catch (e) { return toast(e.message, 'error'); }
+  for (const ms of [400, 1200, 2500]) setTimeout(pollExternal, ms);
+}
+const pauseExternal = () => { if (ext.state?.playing) extCmd('pause'); }; // never let both play at once
+
 // Pause music and the background video while Minecraft runs (the same process list the app shows in its title bar).
 async function pollGame() {
   let running;
@@ -236,13 +293,17 @@ async function pollGame() {
 
 let miniPlayer = null;
 function buildMiniPlayer() {
-  const play = h('button', { class: 'vn-mp-btn', onclick: togglePlay });
-  const title = h('button', { class: 'vn-mp-title', 'data-tip': 'Music settings · scroll to change volume', 'data-tip-side': 'bottom', onclick: () => openUI('music') });
+  const isExt = () => playerSource() === 'ext';
+  const play = h('button', { class: 'vn-mp-btn', onclick: () => (isExt() ? extCmd('toggle') : togglePlay()) });
+  const title = h('button', { class: 'vn-mp-title', 'data-tip-side': 'bottom', onclick: () => openUI('music') });
   const eq = eqBars(false);
+  const art = h('img', { class: 'vn-mp-art', alt: '', hidden: true });
+  const progress = h('i', { class: 'vn-mp-progress', hidden: true });
   let flash;
   const el = h('div', {
     class: 'vn-player', role: 'group', 'aria-label': 'Music player',
     onwheel: (e) => {
+      if (isExt()) return; // Spotify's volume isn't exposed to other apps
       e.preventDefault();
       set({ 'music.volume': Math.max(0, Math.min(100, S['music.volume'] + (e.deltaY < 0 ? 5 : -5))) });
       title.textContent = `Volume ${S['music.volume']}%`;
@@ -250,17 +311,32 @@ function buildMiniPlayer() {
       flash = setTimeout(update, 1200);
     },
   },
-  h('button', { class: 'vn-mp-btn', 'aria-label': 'Previous track', html: icon('prev', 13), onclick: prevTrack }),
+  h('button', { class: 'vn-mp-btn', 'aria-label': 'Previous track', html: icon('prev', 13), onclick: () => (isExt() ? extCmd('prev') : prevTrack()) }),
   play,
-  h('button', { class: 'vn-mp-btn', 'aria-label': 'Next track', html: icon('next', 13), onclick: nextTrack }),
-  eq, title);
+  h('button', { class: 'vn-mp-btn', 'aria-label': 'Next track', html: icon('next', 13), onclick: () => (isExt() ? extCmd('next') : nextTrack()) }),
+  eq, art, title, progress);
   const update = () => {
-    const playing = !music.audio.paused;
+    const ext_ = isExt();
+    const st = ext.state;
+    const playing = ext_ ? st.playing : !music.audio.paused;
     play.innerHTML = icon(playing ? 'pause' : 'play', 13);
     play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    title.textContent = currentTrack() ? trackName(currentTrack()) : music.pausedByGame ? 'Paused for game' : `${S['music.list'].length} track${S['music.list'].length === 1 ? '' : 's'}`;
+    if (ext_) {
+      const line = [st.title, st.artist].filter(Boolean).join(' – ') || `Nothing playing in ${extApp(st.app)}`;
+      title.textContent = line;
+      title.dataset.tip = `${extApp(st.app)} · ${line}`;
+      if (ext.art) art.src = ext.art;
+      art.hidden = !ext.art;
+    } else {
+      title.textContent = currentTrack() ? trackName(currentTrack()) : music.pausedByGame ? 'Paused for game' : `${S['music.list'].length} track${S['music.list'].length === 1 ? '' : 's'}`;
+      title.dataset.tip = 'Music settings · scroll to change volume';
+      art.hidden = true;
+    }
+    eq.hidden = ext_;
+    progress.hidden = !ext_ || !st.dur;
     el.classList.toggle('playing', playing);
   };
+  setInterval(() => { if (!progress.hidden) progress.style.setProperty('--p', `${extPosition() * 100}%`); }, 500);
   music.subs.add(update);
   update();
   return el;
@@ -276,7 +352,10 @@ function applyMedia() {
 }
 
 function startMedia() {
-  keep(() => (miniPlayer ??= buildMiniPlayer()), (el) => $('.app-title-bar section')?.prepend(el), () => S['music.player'] && S['music.list'].length > 0);
+  keep(() => (miniPlayer ??= buildMiniPlayer()), (el) => $('.app-title-bar section')?.prepend(el), () => S['music.player'] && (S['music.list'].length > 0 || extActive()));
   setInterval(pollGame, 4000);
+  setInterval(pollExternal, 1500);
+  pollExternal();
+  onChange((patch) => { if ('spotify.mode' in patch) { ext.artKey = ''; pollExternal(); } });
   if (S['music.autoplay'] && S['music.list'].length) setTimeout(() => (S['music.shuffle'] ? nextTrack() : playTrack(0)), 1200);
 }

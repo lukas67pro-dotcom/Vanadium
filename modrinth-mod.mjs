@@ -92,9 +92,32 @@ const PLUGINS = ${loadPlugins()};
 ${await loadClient(clientSrc)}
 })();`;
 
-// Window resizing: Modrinth's permissions block resize/set_size from the page, so a hidden PowerShell helper does it
-// with Win32 GetWindowRect / SetWindowPos on the Modrinth window. One line in, one line out.
+// Host helper: things the page can't do itself, run by a hidden PowerShell. One line in; ops that reply print one line.
+// - Window resizing: Modrinth's permissions block resize/set_size, so Win32 GetWindowRect / SetWindowPos do it.
+// - Spotify (and Spicetify, or any player with "any"): Windows' system media controls (GSMTC) give the track,
+//   cover art and play/pause/next/previous without any Spotify login.
 const WIN_HOST_PS = `
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+$media = $true
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
+  $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage, ContentType = WindowsRuntime]
+  $null = [Windows.Storage.Streams.IInputStream, Windows.Storage, ContentType = WindowsRuntime]
+  # The cover stream arrives as an opaque COM object; invoking through reflection lets .NET query it for IInputStream.
+  $asStream = [System.IO.WindowsRuntimeStreamExtensions].GetMethod('AsStreamForRead', [Type[]]@([Windows.Storage.Streams.IInputStream]))
+  $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.IsGenericMethod -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' } | Select-Object -First 1
+} catch { $media = $false }
+function Await($op, [Type]$t) { $task = $asTask.MakeGenericMethod($t).Invoke($null, @($op)); [void]$task.Wait(3000); $task.Result }
+$mgr = $null
+function Get-Session($filter) {
+  if (-not $script:mgr) { $script:mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]) }
+  $sp = @($script:mgr.GetSessions()) | Where-Object { $_.SourceAppUserModelId -match 'spotify' } | Select-Object -First 1
+  if ($sp) { return $sp }
+  if ($filter -eq 'any') { return $script:mgr.GetCurrentSession() }
+  return $null
+}
+function Get-Props($s) { Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]) }
 Add-Type @"
 using System; using System.Runtime.InteropServices;
 public static class VW {
@@ -111,6 +134,30 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
   $p = $line.Split(' ')
   if ($p[0] -eq 'rect') { $r = New-Object VW+RECT; [void][VW]::GetWindowRect($h, [ref]$r); [Console]::Out.WriteLine("$($r.L) $($r.T) $($r.R - $r.L) $($r.B - $r.T)") }
   elseif ($p[0] -eq 'set') { [void][VW]::SetWindowPos($h, [IntPtr]::Zero, [int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4], 0x14) }
+  elseif ($p[0] -eq 'media') {
+    $out = 'null'
+    try { if ($media) { $s = Get-Session $p[1]; if ($s) {
+      $m = Get-Props $s; $tl = $s.GetTimelineProperties()
+      $out = [ordered]@{ app = $s.SourceAppUserModelId; title = $m.Title; artist = $m.Artist; album = $m.AlbumTitle
+        playing = ($s.GetPlaybackInfo().PlaybackStatus -eq 'Playing'); pos = $tl.Position.TotalSeconds; dur = $tl.EndTime.TotalSeconds
+        at = $tl.LastUpdatedTime.ToUnixTimeMilliseconds() } | ConvertTo-Json -Compress } } } catch {}
+    [Console]::Out.WriteLine($out)
+  }
+  elseif ($p[0] -eq 'art') {
+    $out = 'null'
+    try { if ($media) { $s = Get-Session $p[1]; if ($s) { $m = Get-Props $s; if ($m.Thumbnail) {
+      $st = Await ($m.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
+      $ms = New-Object IO.MemoryStream; $asStream.Invoke($null, @($st)).CopyTo($ms); $b = $ms.ToArray()
+      $type = if ($b.Length -gt 1 -and $b[0] -eq 0xFF -and $b[1] -eq 0xD8) { 'image/jpeg' } else { 'image/png' }
+      if ($b.Length) { $out = '"data:' + $type + ';base64,' + [Convert]::ToBase64String($b) + '"' } } } } } catch {}
+    [Console]::Out.WriteLine($out)
+  }
+  elseif ($p[0] -eq 'mcmd') {
+    try { if ($media) { $s = Get-Session $p[2]; if ($s) {
+      $op = switch ($p[1]) { 'toggle' { $s.TryTogglePlayPauseAsync() } 'pause' { $s.TryPauseAsync() } 'next' { $s.TrySkipNextAsync() } 'prev' { $s.TrySkipPreviousAsync() } }
+      [void](Await $op ([bool])) } } } catch {}
+    [Console]::Out.WriteLine('true')
+  }
 }`;
 let winHost = null;
 const winReplies = [];
@@ -120,6 +167,7 @@ function winCmd(line, expectReply) {
     winReplies.length = 0;
     winReplies.push(() => {}); // swallow the 'ready' line
     let buf = '';
+    winHost.stdout.setEncoding('utf8'); // song titles: don't split multi-byte characters across chunks
     winHost.stdout.on('data', (d) => {
       buf += d;
       for (let i; (i = buf.indexOf('\n')) >= 0; buf = buf.slice(i + 1)) winReplies.shift()?.(buf.slice(0, i).trim());
@@ -141,6 +189,12 @@ async function onHostCall({ payload, executionContextId }, send) {
     result = { x, y, w, h };
   } else if (req.op === 'set' && [req.x, req.y, req.w, req.h].every(int)) {
     await winCmd(`set ${req.x} ${req.y} ${Math.max(640, req.w)} ${Math.max(400, req.h)}`, false); // never smaller than a usable window
+  } else if (req.op === 'media' || req.op === 'art') {
+    const filter = req.filter === 'any' ? 'any' : 'spotify'; // only fixed words reach the PowerShell line
+    try { result = JSON.parse(await winCmd(`${req.op} ${filter}`, true)); } catch { result = null; }
+  } else if (req.op === 'mcmd' && ['toggle', 'pause', 'next', 'prev'].includes(req.action)) {
+    await winCmd(`mcmd ${req.action} ${req.filter === 'any' ? 'any' : 'spotify'}`, true);
+    result = true;
   } else return;
   if (req.id) send('Runtime.evaluate', { expression: `window.__vanadiumHostCb?.(${JSON.stringify(req.id)}, ${JSON.stringify(result)})`, contextId: executionContextId }).catch(() => {});
 }

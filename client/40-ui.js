@@ -400,8 +400,31 @@ const PAGE_RENDER = {
       toast(`Importing ${files.length} file${files.length > 1 ? 's' : ''}…`);
       try { addTracks(await Promise.all(files.map((f) => media.add(f)))); } catch (e) { toast(`Import failed: ${e.message}`, 'error'); }
     };
+    // Live status of Spotify (or another player) as the title bar sees it.
+    const extStatus = h('div', { class: 'vn-np' });
+    const drawExt = () => {
+      const st = ext.state;
+      const loaderOld = typeof window.vanadiumHost !== 'function';
+      const line = st ? [st.title, st.artist].filter(Boolean).join(' – ') : '';
+      extStatus.replaceChildren(
+        ext.art && st ? h('img', { src: ext.art, alt: '', style: { width: '66px', height: '66px', borderRadius: '16px', objectFit: 'cover', flex: 'none' } }) : h('div', { class: 'vn-np-art', html: icon('music', 28) }),
+        h('div', { class: 'vn-np-info' },
+          h('div', { class: 'vn-np-title' }, line || (S['spotify.mode'] === 'off' ? 'Off' : 'Nothing playing')),
+          h('div', { class: 'vn-row-desc' }, loaderOld ? 'Restart the Vanadium loader to use this.'
+            : S['spotify.mode'] === 'off' ? 'Turn it on below to show Spotify in the title bar.'
+              : st ? `${st.playing ? 'Playing' : 'Paused'} in ${extApp(st.app)}` : S['spotify.mode'] === 'any' ? 'Start music in Spotify or any player.' : 'Start a song in Spotify.')),
+        st && h('div', { class: 'vn-np-controls' },
+          iconBtn('prev', 'Previous track', () => extCmd('prev')),
+          h('button', { class: 'vn-np-play', 'aria-label': st.playing ? 'Pause' : 'Play', html: icon(st.playing ? 'pause' : 'play', 20), onclick: () => extCmd('toggle') }),
+          iconBtn('next', 'Next track', () => extCmd('next'))));
+    };
+    music.subs.add(drawExt);
+    cleanups.push(() => music.subs.delete(drawExt));
+    drawExt();
     return [
       card('Now playing', np, slider('music.volume', 'Volume', 'Scroll over the mini player in the title bar to change it from anywhere.', 0, 100, 1, '%')),
+      card('Spotify', extStatus,
+        segment('spotify.mode', 'Show in the title bar', 'Shows the song playing in Spotify (Spicetify too) in the title bar, with play, pause and skip. Uses Windows\' media controls, so no Spotify login is needed. "Any app" also follows browsers and other players. Starting your Vanadium playlist pauses Spotify.', [['spotify', 'Spotify'], ['any', 'Any app'], ['off', 'Off']])),
       card('Playlist', list, h('div', { class: 'vn-block' }, h('div', { class: 'vn-actions' },
         btn('Add files', 'upload', addFiles, 'primary'), btn('Add link', 'link', () => { urlRow.hidden = !urlRow.hidden; if (!urlRow.hidden) urlInput.focus(); })), urlRow)),
       card('Playback',

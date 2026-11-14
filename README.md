@@ -30,6 +30,10 @@ Vanadium re-skins and rearranges the whole launcher. It adds Hyprland-style tili
 - **Music:**
   - A playlist of local files or direct links, with shuffle, volume and a title-bar mini player.
   - Music and background video pause automatically while Minecraft runs.
+- **Spotify and Spicetify in the title bar:**
+  - The mini player shows what's playing in Spotify (cover, song and artist, progress) with play, pause and skip.
+  - No Spotify login needed. Works with Spicetify, and optionally with any other player.
+  - Starting your Vanadium playlist pauses Spotify.
 - **Declutter:**
   - Hide the news feed (there's a Hide button right on its heading), the ad and the "Upgrade to Modrinth+" button, the sign-in prompt, nav buttons, or the whole sidebar.
   - Streamer mode blurs your account.
@@ -100,6 +104,10 @@ Notes:
 - **Local media** you pick is stored in the launcher's own browser storage (IndexedDB), so large videos work and nothing depends on file paths.
 - **The ad** is a separate native window. Vanadium hides it through the same counter the app itself uses while in fullscreen.
 - **Window resizing** is blocked by Modrinth's permissions, so the loader does it from outside with the Win32 API.
+- **Spotify** is read through Windows' system media controls (the same ones behind the volume flyout), by the loader's helper:
+  - It gets the track, cover and play state, and can play, pause and skip.
+  - Spicetify is a modded Spotify client, so it appears the same way.
+  - Spotify doesn't expose its volume to other apps, so volume stays in Spotify.
 
 ## Plugins
 
