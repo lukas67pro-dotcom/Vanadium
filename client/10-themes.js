@@ -9,6 +9,7 @@ const PALETTES = {
   nord: { name: 'Nord', s: ['#242933', '#2e3440', '#3b4252', '#434c5e', '#4c566a'], t: ['#eceff4', '#d8dee9', '#a3abb9'] },
   rose: { name: 'Rosé Pine', s: ['#191724', '#1f1d2e', '#26233a', '#2f2b45', '#403d52'], t: ['#e0def4', '#c5c2dc', '#908caa'] },
   amoled: { name: 'AMOLED', s: ['#000000', '#08080a', '#111114', '#1b1b1f', '#2a2a30'], t: ['#ffffff', '#bcbcbc', '#8a8a8a'] },
+  starry: { name: 'StarryNight', s: ['#05080f', '#0d1626', '#152238', '#1d2d47', '#2a3d5c'], t: ['#ffffff', '#d5dbe2', '#adb5bd'] },
 };
 
 const THEMES = {
@@ -20,16 +21,18 @@ const THEMES = {
   rose: { name: 'Rosé Pine', desc: 'Muted rose and iris, all natural pine', layout: 'tiled', palette: 'rose', accent: '#ebbcba', accent2: '#c4a7e7', opacity: 84, blur: 18, radius: 16, gap: 10, border: 2, animBorder: false, font: 'grotesk', controls: 'traffic' },
   nord: { name: 'Nord', desc: 'Arctic flat panels, no transparency', layout: 'flat', palette: 'nord', accent: '#88c0d0', accent2: '#81a1c1', opacity: 100, blur: 0, radius: 10, gap: 10, border: 1, animBorder: false, font: 'inter', controls: 'minimal' },
   amoled: { name: 'AMOLED', desc: 'True black for OLED panels', layout: 'flat', palette: 'amoled', accent: '#00ffcc', accent2: '#00ffcc', opacity: 100, blur: 0, radius: 12, gap: 10, border: 1, animBorder: false, font: 'default', controls: 'minimal' },
+  // Colors from the MIT-licensed Spicetify theme "StarryNight" (Base scheme); the animated sky is Vanadium's own.
+  starry: { name: 'StarryNight', desc: 'Night sky with twinkling and shooting stars, after the Spicetify theme', layout: 'glass', palette: 'starry', accent: '#fff3c4', accent2: '#a9c4ff', opacity: 30, blur: 0, /* blur would smear the stars */ radius: 12, gap: 10, border: 1, animBorder: false, font: 'default', controls: 'minimal', sky: true },
   auto: { name: 'Wallpaper', desc: 'Colors picked from your background, like pywal', layout: 'glass', palette: 'auto' },
   stock: { name: 'Stock', desc: 'Modrinth exactly as shipped', layout: 'stock', palette: 'modrinth', accent: '#1bd96a', accent2: '#1bd96a', controls: 'default', font: 'default' },
 };
 const PRESET_KEYS = ['layout', 'palette', 'accent', 'accent2', 'opacity', 'blur', 'radius', 'gap', 'border', 'animBorder', 'font', 'controls'];
 function applyPreset(id) {
   if (id === 'auto') { // colors only: keep the user's layout, as long as it shows the wallpaper
-    return set({ theme: 'auto', palette: 'auto', ...(['glass', 'tiled'].includes(S.layout) ? {} : { layout: 'glass' }) }); // colors are read by the palette listener in 30-media
+    return set({ theme: 'auto', palette: 'auto', sky: false, ...(['glass', 'tiled'].includes(S.layout) ? {} : { layout: 'glass' }) }); // colors are read by the palette listener in 30-media
   }
   const t = THEMES[id];
-  const patch = { theme: id };
+  const patch = { theme: id, sky: !!t.sky }; // the starry sky belongs to its theme; picking another turns it off
   for (const k of PRESET_KEYS) if (k in t) patch[k] = t[k];
   set(patch);
 }

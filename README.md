@@ -9,7 +9,8 @@ Vanadium re-skins and rearranges the whole launcher. It adds Hyprland-style tili
 
 ## Features
 
-- **Themes:** Hyprland, CachyOS, Liquid Glass, Catppuccin, Tokyo Night, Rosé Pine, Nord, AMOLED, Wallpaper and Stock.
+- **Themes:** Hyprland, CachyOS, Liquid Glass, Catppuccin, Tokyo Night, Rosé Pine, Nord, AMOLED, StarryNight, Wallpaper and Stock.
+- **StarryNight:** a night sky with twinkling and shooting stars behind clear glass, after the Spicetify theme of the same name. The sky ("Starry sky") can be switched on with any theme, and it pauses while Minecraft runs.
 - **Wallpaper theme (pywal-style):** takes its accent and panel colors from your background image, GIF or video, and updates when you change it.
 - **Layouts:**
   - **Tiled:** floating windows with gaps and gradient borders that light up (and can spin) on hover.
@@ -135,6 +136,10 @@ Windows only. macOS (WKWebView) and Linux (WebKitGTK) have no DevTools switch an
 
 - While Modrinth runs with Vanadium, the debugging port on `127.0.0.1:9333` gives **any program on your PC** full control over the launcher page, including your logged-in Modrinth and Microsoft sessions. It isn't reachable from the network, but only use Vanadium on a PC you trust.
 - Plugins, custom CSS and `--client` URLs run with the same access. Only load code you've read.
+
+## Credits
+
+The StarryNight colors come from the [StarryNight](https://github.com/spicetify/spicetify-themes/tree/master/StarryNight) Spicetify theme ([spicetify-themes](https://github.com/spicetify/spicetify-themes), MIT). Vanadium draws its own animated sky.
 
 ## License
 

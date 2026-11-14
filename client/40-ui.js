@@ -271,6 +271,7 @@ function mediaPicker(key, { label, accept, kinds }) {
   return box;
 }
 
+const SKY_MOCK = ['12% 22%', '38% 12%', '66% 30%', '82% 14%', '24% 60%', '90% 52%', '55% 75%', '8% 85%', '72% 66%'].map((at) => `radial-gradient(1.2px 1.2px at ${at}, #fff, transparent)`).join(', ') + ', linear-gradient(#000, #142b44)';
 function themeMock(t) {
   const auto = t.palette === 'auto'; // previews your actual wallpaper and the colors taken from it
   const p = (auto ? S['auto.palette'] : PALETTES[t.palette]) ?? PALETTES.modrinth;
@@ -279,7 +280,7 @@ function themeMock(t) {
   const wall = auto && wallpaperUrl();
   return h('div', {
     class: `vn-mock vn-mock-${auto && S.layout === 'tiled' ? 'tiled' : t.layout}`, 'aria-hidden': 'true',
-    style: { '--m0': p.s[0], '--m2': p.s[2], '--m3': p.s[3], '--ma1': a1, '--ma2': a2, ...(wall && { background: `center / cover url("${wall}")` }) },
+    style: { '--m0': p.s[0], '--m2': p.s[2], '--m3': p.s[3], '--ma1': a1, '--ma2': a2, ...(wall && { background: `center / cover url("${wall}")` }), ...(t.sky && { background: SKY_MOCK }) },
   }, h('i', { class: 'mt' }), h('i', { class: 'mn' }), h('i', { class: 'mv' }, h('u'), h('u'), h('u'), h('u')), h('i', { class: 'ms' }));
 }
 
@@ -339,6 +340,7 @@ const PAGE_RENDER = {
     }
     out.push(card(null,
       mediaPicker('bg.src', { label: 'Background', accept: 'image/*,video/*,.gif,.webp,.mp4,.webm', kinds: ['image', 'video'] }),
+      toggle('sky', 'Starry sky', 'A night sky with twinkling and shooting stars, shown instead of your background. Part of the StarryNight theme, and works with any theme.'),
       slider('bg.dim', 'Dim', 'Darkens the background so text stays readable.', 0, 85, 1, '%'),
       slider('bg.volume', 'Video sound', 'Background videos stay muted at 0.', 0, 100, 1, '%'),
       toggle('game.pause', 'Pause while playing', 'Stops background video and music while Minecraft is running, to save performance.')));

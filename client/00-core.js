@@ -1,7 +1,7 @@
 // Core: settings store, DOM helpers, icons, media library, Tauri bridge.
 // The loader wraps every client/*.js file (in name order) in one closure, so these are shared by the other files.
 const BRAND = 'Vanadium';
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 const STORE_KEY = 'vanadium:settings';
 
 const DEFAULTS = {
@@ -13,7 +13,7 @@ const DEFAULTS = {
   'bg.src': null, 'bg.dim': 25, 'bg.volume': 0,
   'load.src': null, 'load.mode': 'ready', 'load.fit': 'cover', 'load.min': 2, 'load.volume': 50,
   'music.list': [], 'music.volume': 35, 'music.shuffle': false, 'music.autoplay': false, 'music.player': true,
-  'game.pause': true, 'spotify.mode': 'spotify',
+  'game.pause': true, 'spotify.mode': 'spotify', sky: false,
   'window.resize': true,
   'hide.news': false, 'hide.ads': false, 'hide.plus': false, 'hide.signin': false, 'hide.sidebar': false,
   'hide.discover': false, 'hide.skins': false, 'hide.screenshots': false, 'hide.hosting': false,

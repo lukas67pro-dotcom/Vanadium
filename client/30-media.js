@@ -79,13 +79,48 @@ function startLoadingScreen({ preview = false } = {}) {
   })();
 }
 
+// ---------- starry sky (StarryNight theme, or the "Starry sky" toggle on any theme) ----------
+const SKY_CSS = `
+#vn-sky { position: absolute; inset: 0; display: none; overflow: hidden; background: linear-gradient(to bottom, #000000 0%, #07101c 45%, #142b44 100%); }
+html.vn-sky #vn-sky { display: block; }
+html.vn-sky #vn-bg > :is(img, video) { display: none; } /* the sky replaces the wallpaper while it's on */
+html.vn-sky #vn-bg::after { display: none; }
+#vn-sky .vn-stars { position: absolute; left: 0; top: 0; border-radius: 50%; background: transparent; animation: vn-twinkle 7s steps(7) infinite alternate; }
+#vn-sky .vn-stars.s1 { width: 1px; height: 1px; }
+#vn-sky .vn-stars.s2 { width: 2px; height: 2px; animation-duration: 11s; animation-delay: -4s; }
+#vn-sky .vn-stars.s3 { width: 2px; height: 2px; animation-duration: 15s; animation-delay: -9s; }
+#vn-sky .vn-shoot { position: absolute; width: 170px; height: 2px; border-radius: 2px; opacity: 0;
+  background: linear-gradient(90deg, #ffffff, rgb(255 255 255 / .35) 30%, transparent); filter: drop-shadow(0 0 5px #fff);
+  animation: vn-shoot var(--d, 11s) linear infinite; animation-delay: var(--delay, 0s); }
+@keyframes vn-twinkle { 0% { opacity: 1; } 40% { opacity: .5; } 70% { opacity: .85; } 100% { opacity: .65; } }
+@keyframes vn-shoot {
+  0% { opacity: 0; transform: rotate(-32deg) translateX(0); }
+  1.5% { opacity: 1; }
+  8% { opacity: 0; transform: rotate(-32deg) translateX(-560px); }
+  100% { opacity: 0; transform: rotate(-32deg) translateX(-560px); }
+}
+html.vn-sky-paused #vn-sky * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) { #vn-sky .vn-shoot { display: none; } #vn-sky .vn-stars { animation: none; } }
+`;
+function buildSky() {
+  let seed = 23; // fixed seed: the same sky every launch
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const stars = (n, glow) => Array.from({ length: n }, () => `${(rand() * 100).toFixed(2)}vw ${(rand() * 100).toFixed(2)}vh ${glow} rgb(255 255 255 / ${(0.55 + rand() * 0.45).toFixed(2)})`).join(',');
+  const layer = (cls, n, glow) => h('i', { class: `vn-stars ${cls}`, style: { boxShadow: stars(n, glow) } });
+  const shooting = [[8, 62, 11, 0], [22, 88, 14, 5.5], [3, 40, 17, 9], [30, 75, 13, 12]].map(([top, left, d, delay]) =>
+    h('i', { class: 'vn-shoot', style: { top: `${top}%`, left: `${left}%`, '--d': `${d}s`, '--delay': `${delay}s` } }));
+  return h('div', { id: 'vn-sky' }, layer('s1', 260, '0 0'), layer('s2', 90, '0 0'), layer('s3', 28, '3px 1px'), shooting);
+}
+
 // ---------- wallpaper ----------
-const bgLayer = h('div', { id: 'vn-bg', 'aria-hidden': 'true' });
+const bgLayer = h('div', { id: 'vn-bg', 'aria-hidden': 'true' }, buildSky());
 let bgKey = null;
 let bgMedia = null;
 let gameRunning = false;
 
 function syncVideoPlayback() {
+  // The sky animates under blurred glass, so it pauses with the video: hidden window or Minecraft running.
+  document.documentElement.classList.toggle('vn-sky-paused', document.hidden || (gameRunning && S['game.pause']));
   if (bgMedia?.tagName !== 'VIDEO') return;
   const play = ['glass', 'tiled'].includes(S.layout) && !document.hidden && !(gameRunning && S['game.pause']);
   play ? bgMedia.play().catch(() => {}) : bgMedia.pause();
@@ -344,7 +379,9 @@ function buildMiniPlayer() {
 
 let lastMusic = { list: null, volume: null };
 function applyMedia() {
-  css('vn-media', MEDIA_CSS);
+  css('vn-media', MEDIA_CSS + SKY_CSS);
+  document.documentElement.classList.toggle('vn-sky', !!S.sky);
+  syncVideoPlayback();
   applyBackground();
   if (lastMusic.volume !== S['music.volume']) music.audio.volume = S['music.volume'] / 100;
   if (lastMusic.list !== S['music.list']) notifyMusic();
